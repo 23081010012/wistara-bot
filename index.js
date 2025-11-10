@@ -1,5 +1,5 @@
 // =======================
-// WISTARABOT v2 (Smart Chatbot API)
+// WISTARABOT v3 (Dynamic Products & News)
 // =======================
 
 import express from "express";
@@ -10,28 +10,27 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// =============== STATUS SERVER ===============
+// === STATUS SERVER ===
 app.get("/", (req, res) => {
-  res.send("✅ WistaraBot API v2 aktif dan berjalan dengan baik!");
+  res.send("✅ WistaraBot v3 aktif dan berjalan dengan data dinamis (produk & berita)!");
 });
 
-// =============== ENDPOINT CHATBOT ===============
+// === ENDPOINT CHATBOT ===
 app.post("/api/chat", async (req, res) => {
   const { message, state } = req.body;
   const response = await getBotReply(message, state);
   res.json(response);
 });
 
-// Tambahkan route GET agar tidak error "Cannot GET /api/chat"
 app.get("/api/chat", (req, res) => {
-  res.send("⚙️ Endpoint chatbot aktif — gunakan POST dengan body JSON { message: '...' }");
+  res.send("⚙️ Endpoint aktif — gunakan POST { message: '...' } untuk kirim pesan.");
 });
 
-// =============== LOGIKA CHATBOT ===============
+// === LOGIKA UTAMA CHATBOT ===
 async function getBotReply(text, state = "menu") {
   text = (text || "").toLowerCase().trim();
 
-  // MENU UTAMA
+  // === MENU UTAMA ===
   if (text === "menu" || state === "menu") {
     return {
       reply: `
@@ -39,79 +38,99 @@ async function getBotReply(text, state = "menu") {
 
 Silakan pilih layanan:
 1️⃣ Katalog Produk  
-2️⃣ Cek Stok Produk  
-3️⃣ Berita Terbaru  
-4️⃣ Alamat & Jam Buka  
+2️⃣ Berita Terbaru  
+3️⃣ Alamat & Jam Buka  
 0️⃣ Hubungi Admin
 
 Ketik angka atau pilih tombol di bawah 👇
       `,
-      quick_replies: ["1", "2", "3", "4", "0"],
+      quick_replies: ["1", "2", "3", "0"],
       next_state: "menu"
     };
   }
 
-  // PRODUK
+  // === PRODUK DINAMIS ===
   if (text === "1" || text.includes("produk")) {
     try {
       const res = await fetch("https://batikwistara.com/api/produk");
       const data = await res.json();
 
       if (!data.length) {
-        return { reply: "📦 Belum ada produk yang tersedia saat ini.", next_state: "menu" };
+        return { reply: "📦 Belum ada produk saat ini.", next_state: "menu" };
       }
 
       let reply = "🧵 *Katalog Produk Batik Wistara:*\n\n";
       data.forEach(p => {
         reply += `• ${p.nama_produk} — Rp${p.harga}\n`;
       });
-      reply += "\nKetik *menu* untuk kembali ke daftar utama.";
-      return { reply, next_state: "menu" };
+      reply += "\nPilih produk di bawah ini 👇";
+
+      const quickReplies = data.map(p => p.nama_produk);
+
+      return { reply, quick_replies: quickReplies, next_state: "pilih_produk" };
     } catch (err) {
-      return { reply: "⚠️ Gagal memuat data produk.", next_state: "menu" };
+      console.error("❌ Error produk:", err);
+      return { reply: "⚠️ Gagal memuat data produk dari server.", next_state: "menu" };
     }
   }
 
-  // STOK PRODUK
-  if (text === "2" || text.includes("stok")) {
-    try {
-      const res = await fetch("https://batikwistara.com/api/produk");
-      const data = await res.json();
-
-      let reply = "📦 *Cek Ketersediaan Stok Produk:*\n\n";
-      data.forEach(p => {
-        reply += `• ${p.nama_produk} → ${p.stok > 0 ? "✅ Ready" : "❌ Habis"}\n`;
-      });
-      reply += "\nKetik *menu* untuk kembali.";
-      return { reply, next_state: "menu" };
-    } catch (err) {
-      return { reply: "⚠️ Gagal memuat data stok.", next_state: "menu" };
-    }
+  // === PILIH PRODUK (STATE LANJUTAN) ===
+  if (state === "pilih_produk") {
+    const linkWA = `https://wa.me/6281234567890?text=Halo%20saya%20ingin%20memesan%20${encodeURIComponent(text)}`;
+    return {
+      reply: `Terima kasih! Untuk memesan *${text}*, silakan klik tautan berikut:\n👉 ${linkWA}\n\nKetik *menu* untuk kembali.`,
+      next_state: "menu"
+    };
   }
 
-  // BERITA TERBARU
-  if (text === "3" || text.includes("berita")) {
+  // === BERITA DINAMIS ===
+  if (text === "2" || text.includes("berita")) {
     try {
       const res = await fetch("https://batikwistara.com/api/berita");
       const data = await res.json();
 
       if (!data.length) {
-        return { reply: "📰 Belum ada berita terbaru untuk saat ini.", next_state: "menu" };
+        return { reply: "📰 Belum ada berita terbaru.", next_state: "menu" };
       }
 
       let reply = "📰 *Berita Terbaru Batik Wistara:*\n\n";
       data.forEach(b => {
         reply += `• ${b.judul} (${b.tanggal})\n`;
       });
-      reply += "\nKetik *menu* untuk kembali.";
-      return { reply, next_state: "menu" };
+      reply += "\nKlik salah satu berita di bawah 👇";
+
+      const quickReplies = data.map(b => b.judul);
+
+      return { reply, quick_replies: quickReplies, next_state: "pilih_berita" };
     } catch (err) {
-      return { reply: "⚠️ Gagal memuat data berita.", next_state: "menu" };
+      console.error("❌ Error berita:", err);
+      return { reply: "⚠️ Gagal memuat berita dari server.", next_state: "menu" };
     }
   }
 
-  // ALAMAT & JAM BUKA
-  if (text === "4" || text.includes("alamat") || text.includes("buka")) {
+  // === PILIH BERITA (STATE LANJUTAN) ===
+  if (state === "pilih_berita") {
+    try {
+      const res = await fetch("https://batikwistara.com/api/berita");
+      const data = await res.json();
+      const item = data.find(b => b.judul.toLowerCase().includes(text.toLowerCase()));
+
+      if (item) {
+        const link = item.slug ? `https://batikwistara.com/berita/${item.slug}` : "#";
+        return {
+          reply: `📰 *${item.judul}*\nTanggal: ${item.tanggal}\n\nBaca selengkapnya:\n👉 ${link}\n\nKetik *menu* untuk kembali.`,
+          next_state: "menu"
+        };
+      } else {
+        return { reply: "❌ Maaf, berita tersebut tidak ditemukan.", next_state: "menu" };
+      }
+    } catch (err) {
+      return { reply: "⚠️ Gagal memuat detail berita.", next_state: "menu" };
+    }
+  }
+
+  // === ALAMAT & JAM BUKA ===
+  if (text === "3" || text.includes("alamat") || text.includes("buka")) {
     return {
       reply: `
 📍 *Toko Batik Wistara*
@@ -126,7 +145,7 @@ Ketik *menu* untuk kembali.
     };
   }
 
-  // HUBUNGI ADMIN
+  // === HUBUNGI ADMIN ===
   if (text === "0" || text.includes("admin") || text.includes("kontak")) {
     return {
       reply: `
@@ -140,21 +159,13 @@ Ketik *menu* untuk kembali.
     };
   }
 
-  // DEFAULT (fallback)
+  // === DEFAULT ===
   return {
     reply: "🙏 Maaf, saya belum paham. Ketik *menu* untuk melihat daftar pilihan.",
     next_state: "menu"
   };
 }
 
-// =============== JALANKAN SERVER ===============
+// === JALANKAN SERVER ===
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`🚀 WistaraBot API v2 aktif di port ${port}`));
-
-import fs from "fs";
-const logStream = fs.createWriteStream("./app.log", { flags: "a" });
-const origConsoleError = console.error;
-console.error = (...args) => {
-  logStream.write(args.join(" ") + "\n");
-  origConsoleError.apply(console, args);
-};
+app.listen(port, () => console.log(`🚀 WistaraBot v3 berjalan di port ${port}`));
