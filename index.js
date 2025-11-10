@@ -1,153 +1,152 @@
+// ===============================
+// 🤖 WISTARA CHATBOT REST API
+// ===============================
 import express from "express";
 import cors from "cors";
 import fetch from "node-fetch";
+import dotenv from "dotenv";
+dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const produkAPI = "https://batikwistara.com/api/produk";
-const beritaAPI = "https://batikwistara.com/api/berita";
-const saveChatAPI = "https://batikwistara.com/api/save-chat";
+const PORT = process.env.PORT || 3000;
 
-const sessions = {}; // Simpan session per user sementara (di RAM)
+// Ganti dengan nomor admin WhatsApp kamu (tanpa tanda +)
+const ADMIN_WA = "6281234567890"; 
 
-// === Fungsi utama chatbot ===
+// ===============================
+// 🧠 LOGIKA CHATBOT
+// ===============================
 app.post("/api/chat", async (req, res) => {
-  const { message, session_id } = req.body;
+  const { message } = req.body;
   const msg = (message || "").toLowerCase().trim();
-  const sid = session_id || Math.random().toString(36).substring(2, 12);
-
-  if (!sessions[sid]) sessions[sid] = { state: "menu" };
+  console.log("💬 Pesan diterima:", msg);
 
   let reply = "";
   let quick_replies = [];
-  let next_state = "menu";
 
   try {
-    // --- MENU UTAMA ---
-    if (["menu", "hi", "hai", "halo"].includes(msg)) {
-      reply = `✨ <b>Selamat datang di Batik Wistara!</b> ✨<br>
-      Silakan pilih layanan:<br><br>
-      1️⃣ Katalog Produk<br>
-      2️⃣ Berita Terbaru<br>
-      3️⃣ Alamat & Jam Buka<br>
-      0️⃣ Hubungi Admin<br><br>
-      Ketik angka atau pilih tombol di bawah 👇`;
+    // === Menu Produk ===
+    if (msg.includes("produk") || msg.includes("katalog")) {
+      const produkRes = await fetch("https://batikwistara.com/api/produk");
+      const produkData = await produkRes.json();
+
+      if (!Array.isArray(produkData) || produkData.length === 0) {
+        reply = "⚠️ Maaf, katalog produk belum tersedia.";
+      } else {
+        reply = "<b>🛍️ Katalog Produk Terbaru:</b><br>";
+        produkData.slice(0, 3).forEach((p) => {
+          reply += `
+            <div style='margin-top:10px; border-bottom:1px solid #eee; padding-bottom:10px;'>
+              <img src='https://batikwistara.com/storage/${p.gambar}' 
+                width='100' 
+                style='border-radius:8px; margin-bottom:4px;'><br>
+              <b>${p.nama_produk}</b><br>
+              💰 Rp${parseInt(p.harga).toLocaleString("id-ID")}<br>
+              <a href='${p.link_shopee || "#"}' target='_blank'>🛒 Beli di Shopee</a><br>
+              ${p.link_tiktok ? `<a href='${p.link_tiktok}' target='_blank'>🎥 TikTok Shop</a>` : ""}
+            </div>`;
+        });
+
+        quick_replies = [
+          { label: "Lihat Semua Produk ➜", value: "https://batikwistara.com/katalog" },
+          { label: "💬 Hubungi Admin", value: "admin" },
+          { label: "🔙 Kembali ke Menu Utama", value: "menu" },
+        ];
+      }
+    }
+
+    // === Menu Berita ===
+    else if (msg.includes("berita")) {
+      const beritaRes = await fetch("https://batikwistara.com/api/berita");
+      const beritaData = await beritaRes.json();
+
+      if (!Array.isArray(beritaData) || beritaData.length === 0) {
+        reply = "⚠️ Belum ada berita terbaru.";
+      } else {
+        reply = "<b>📰 Berita Terbaru:</b><br>";
+        beritaData.slice(0, 3).forEach((b) => {
+          reply += `• <a href="https://batikwistara.com/berita/${b.slug}" target="_blank">${b.judul}</a><br>`;
+        });
+
+        quick_replies = [
+          { label: "Lihat Semua Berita ➜", value: "https://batikwistara.com/berita" },
+          { label: "💬 Hubungi Admin", value: "admin" },
+          { label: "🔙 Kembali ke Menu Utama", value: "menu" },
+        ];
+      }
+    }
+
+    // === Menu Alamat ===
+    else if (msg.includes("alamat") || msg.includes("lokasi")) {
+      reply = `
+        📍 <b>Alamat Batik Wistara:</b><br>
+        Jl. Ketintang No.88, Surabaya<br>
+        🕒 Buka: 09.00–17.00 WIB<br><br>
+        <a href="https://goo.gl/maps/smRxxWistara" target="_blank">🗺️ Lihat di Google Maps</a>
+      `;
       quick_replies = [
-        { label: "1️⃣ Katalog Produk", value: "1" },
-        { label: "2️⃣ Berita Terbaru", value: "2" },
-        { label: "3️⃣ Alamat & Jam Buka", value: "3" },
-        { label: "0️⃣ Hubungi Admin", value: "0" }
+        { label: "💬 Hubungi Admin", value: "admin" },
+        { label: "🔙 Kembali ke Menu", value: "menu" },
       ];
-      next_state = "menu";
     }
 
-    // --- KATALOG PRODUK ---
-    else if (msg === "1") {
-      const r = await fetch(produkAPI);
-      const produk = await r.json();
-      if (!produk.length) {
-        reply = "😔 Belum ada produk yang tersedia saat ini.";
-      } else {
-        reply = "<b>🛍️ Katalog Produk Terbaru:</b><br><br>";
-        produk.forEach(p => {
-          reply += `
-          <b>${p.nama_produk}</b><br>
-          💰 Rp${parseInt(p.harga).toLocaleString("id-ID")}<br>
-          📦 Stok: ${p.stok}<br>
-          <img src="https://batikwistara.com/storage/${p.gambar}" width="220" style="border-radius:10px;margin:6px 0;"><br>
-          ${p.link_shopee ? `<a href="${p.link_shopee}" target="_blank">🛒 Beli di Shopee</a><br>` : ""}
-          ${p.link_tiktok ? `<a href="${p.link_tiktok}" target="_blank">🎥 Lihat di TikTok</a><br>` : ""}
-          <hr style="border:0.5px solid #ccc;margin:8px 0;">
-          `;
-        });
-      }
-      quick_replies = [{ label: "🔙 Kembali ke Menu", value: "menu" }];
-      next_state = "produk";
-    }
-
-    // --- BERITA TERBARU ---
-    else if (msg === "2") {
-      const r = await fetch(beritaAPI);
-      const berita = await r.json();
-      if (!berita.length) {
-        reply = "📭 Belum ada berita terbaru saat ini.";
-      } else {
-        reply = "<b>📰 Berita Terbaru Wistara:</b><br><br>";
-        berita.forEach(b => {
-          const tanggal = new Date(b.tanggal).toLocaleDateString("id-ID", {
-            day: "numeric", month: "long", year: "numeric"
-          });
-          reply += `
-          🗓️ <b>${tanggal}</b><br>
-          <b>${b.judul}</b><br>
-          <a href="https://batikwistara.com/berita/${b.slug}" target="_blank">📖 Baca Selengkapnya</a><br><br>
-          `;
-        });
-      }
-      quick_replies = [{ label: "🔙 Kembali ke Menu", value: "menu" }];
-      next_state = "berita";
-    }
-
-    // --- ALAMAT & JAM BUKA ---
-    else if (msg === "3") {
+    // === Menu Hubungi Admin ===
+    else if (msg.includes("admin") || msg === "0") {
       reply = `
-      🏠 <b>Alamat:</b><br>
-      Jl. Ngagel Jaya Selatan No. 23, Surabaya<br><br>
-      🕓 <b>Jam Buka:</b><br>
-      Senin – Sabtu: 09.00 – 17.00<br>
-      Minggu: Tutup<br><br>
-      📞 <a href="https://wa.me/6281234567890" target="_blank">Chat Admin via WhatsApp</a>
+        📞 Klik tombol di bawah untuk menghubungi admin kami via WhatsApp.<br>
+        Kami siap membantu Anda 💛
       `;
-      quick_replies = [{ label: "🔙 Kembali ke Menu", value: "menu" }];
-      next_state = "alamat";
+      quick_replies = [
+        { label: "💬 Chat Admin di WhatsApp", value: `https://wa.me/${ADMIN_WA}?text=Halo%20admin%2C%20saya%20mau%20bertanya.` },
+        { label: "🔙 Kembali ke Menu", value: "menu" },
+      ];
     }
 
-    // --- HUBUNGI ADMIN ---
-    else if (msg === "0") {
-      reply = `
-      💬 Ingin terhubung dengan admin?<br><br>
-      <a href="https://wa.me/6281234567890?text=Halo%20Admin%20Batik%20Wistara!" target="_blank">
-        📱 Chat WhatsApp Admin
-      </a>
-      `;
-      quick_replies = [{ label: "🔙 Kembali ke Menu", value: "menu" }];
-      next_state = "admin";
-    }
-
-    // --- DEFAULT ---
+    // === Menu Utama ===
     else {
-      reply = `❓ Maaf, saya tidak mengerti perintah "<b>${message}</b>".<br>Ketik <b>menu</b> untuk kembali.`;
-      quick_replies = [{ label: "🏠 Kembali ke Menu", value: "menu" }];
-      next_state = "menu";
+      const hour = new Date().getHours();
+      const greet =
+        hour < 12 ? "Selamat pagi ☀️" : hour < 18 ? "Selamat siang 🌤️" : "Selamat malam 🌙";
+
+      reply = `
+        ${greet}! ✨<br>
+        Selamat datang di <b>Batik Wistara</b>.<br>
+        Silakan pilih layanan berikut 👇
+      `;
+      quick_replies = [
+        { label: "🛍️ Katalog Produk", value: "produk" },
+        { label: "📰 Berita Terbaru", value: "berita" },
+        { label: "📍 Alamat & Jam Buka", value: "alamat" },
+        { label: "💬 Hubungi Admin", value: "admin" },
+      ];
     }
 
-    sessions[sid].state = next_state;
-
-    // === Simpan riwayat ke Laravel ===
-    await fetch(saveChatAPI, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        session_id: sid,
-        user_message: message,
-        bot_reply: reply
-      })
-    });
-
-    // === Kirim balasan ke frontend ===
-    res.json({ reply, quick_replies, next_state, session_id: sid });
-
+    res.json({ reply, quick_replies });
   } catch (err) {
-    console.error("❌ Chatbot Error:", err);
-    res.status(500).json({
-      reply: "⚠️ Terjadi kesalahan server chatbot.",
-      quick_replies: [{ label: "🔙 Kembali ke Menu", value: "menu" }]
+    console.error("❌ Error chatbot:", err);
+    res.json({
+      reply: "⚠️ Maaf, terjadi kesalahan pada server chatbot.",
+      quick_replies: [{ label: "🔁 Coba Lagi", value: "menu" }],
     });
   }
 });
 
-// === Jalankan server ===
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Wistara Chatbot API aktif di port ${PORT}`));
+// ===============================
+// ⚙️ ROUTE STATUS UNTUK CEK
+// ===============================
+app.get("/", (req, res) => {
+  res.send(`
+    <html><body style="font-family:sans-serif; text-align:center; padding-top:40px;">
+      <h2>✅ Wistara Chatbot API aktif dan berjalan di server!</h2>
+      <p>Gunakan endpoint: <code>/api/chat</code></p>
+    </body></html>
+  `);
+});
+
+// ===============================
+// 🚀 JALANKAN SERVER
+// ===============================
+app.listen(PORT, () => console.log(`🚀 Chatbot Batik Wistara aktif di port ${PORT}`));
