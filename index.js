@@ -150,3 +150,11 @@ Ketik *menu* untuk kembali.
 // =============== JALANKAN SERVER ===============
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`🚀 WistaraBot API v2 aktif di port ${port}`));
+
+import fs from "fs";
+const logStream = fs.createWriteStream("./app.log", { flags: "a" });
+const origConsoleError = console.error;
+console.error = (...args) => {
+  logStream.write(args.join(" ") + "\n");
+  origConsoleError.apply(console, args);
+};
