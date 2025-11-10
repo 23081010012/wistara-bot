@@ -14,7 +14,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // Ganti dengan nomor admin WhatsApp kamu (tanpa tanda +)
-const ADMIN_WA = "6281234567890"; 
+const ADMIN_WA = "62895381110035"; 
 
 // ===============================
 // 🧠 LOGIKA CHATBOT
@@ -85,7 +85,7 @@ app.post("/api/chat", async (req, res) => {
         📍 <b>Alamat Batik Wistara:</b><br>
         Jl. Ketintang No.88, Surabaya<br>
         🕒 Buka: 09.00–17.00 WIB<br><br>
-        <a href="https://goo.gl/maps/smRxxWistara" target="_blank">🗺️ Lihat di Google Maps</a>
+        <a href="https://maps.app.goo.gl/TY4uB1QNy72n97FYA" target="_blank">🗺️ Lihat di Google Maps</a>
       `;
       quick_replies = [
         { label: "💬 Hubungi Admin", value: "admin" },
