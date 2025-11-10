@@ -6,20 +6,27 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// === Konfigurasi URL API Laravel ===
 const produkAPI = "https://batikwistara.com/api/produk";
 const beritaAPI = "https://batikwistara.com/api/berita";
+const saveChatAPI = "https://batikwistara.com/api/save-chat";
+
+const sessions = {}; // Simpan session per user sementara (di RAM)
 
 // === Fungsi utama chatbot ===
 app.post("/api/chat", async (req, res) => {
-  const message = (req.body.message || "").toLowerCase().trim();
+  const { message, session_id } = req.body;
+  const msg = (message || "").toLowerCase().trim();
+  const sid = session_id || Math.random().toString(36).substring(2, 12);
+
+  if (!sessions[sid]) sessions[sid] = { state: "menu" };
+
   let reply = "";
   let quick_replies = [];
   let next_state = "menu";
 
   try {
     // --- MENU UTAMA ---
-    if (message === "menu" || message === "hai" || message === "halo" || message === "hi") {
+    if (["menu", "hi", "hai", "halo"].includes(msg)) {
       reply = `✨ <b>Selamat datang di Batik Wistara!</b> ✨<br>
       Silakan pilih layanan:<br><br>
       1️⃣ Katalog Produk<br>
@@ -33,13 +40,13 @@ app.post("/api/chat", async (req, res) => {
         { label: "3️⃣ Alamat & Jam Buka", value: "3" },
         { label: "0️⃣ Hubungi Admin", value: "0" }
       ];
+      next_state = "menu";
     }
 
     // --- KATALOG PRODUK ---
-    else if (message === "1") {
+    else if (msg === "1") {
       const r = await fetch(produkAPI);
       const produk = await r.json();
-
       if (!produk.length) {
         reply = "😔 Belum ada produk yang tersedia saat ini.";
       } else {
@@ -56,16 +63,14 @@ app.post("/api/chat", async (req, res) => {
           `;
         });
       }
-
       quick_replies = [{ label: "🔙 Kembali ke Menu", value: "menu" }];
       next_state = "produk";
     }
 
     // --- BERITA TERBARU ---
-    else if (message === "2") {
+    else if (msg === "2") {
       const r = await fetch(beritaAPI);
       const berita = await r.json();
-
       if (!berita.length) {
         reply = "📭 Belum ada berita terbaru saat ini.";
       } else {
@@ -81,61 +86,63 @@ app.post("/api/chat", async (req, res) => {
           `;
         });
       }
-
       quick_replies = [{ label: "🔙 Kembali ke Menu", value: "menu" }];
       next_state = "berita";
     }
 
     // --- ALAMAT & JAM BUKA ---
-    else if (message === "3") {
+    else if (msg === "3") {
       reply = `
       🏠 <b>Alamat:</b><br>
       Jl. Ngagel Jaya Selatan No. 23, Surabaya<br><br>
       🕓 <b>Jam Buka:</b><br>
       Senin – Sabtu: 09.00 – 17.00<br>
       Minggu: Tutup<br><br>
-      📞 Hubungi kami di <a href="https://wa.me/6281234567890" target="_blank">WhatsApp</a> untuk info lebih lanjut.
+      📞 <a href="https://wa.me/6281234567890" target="_blank">Chat Admin via WhatsApp</a>
       `;
       quick_replies = [{ label: "🔙 Kembali ke Menu", value: "menu" }];
       next_state = "alamat";
     }
 
     // --- HUBUNGI ADMIN ---
-    else if (message === "0") {
+    else if (msg === "0") {
       reply = `
       💬 Ingin terhubung dengan admin?<br><br>
-      Klik tombol di bawah ini:<br>
-      <a href="https://wa.me/6281234567890?text=Halo%20Admin%20Batik%20Wistara!" target="_blank">📱 Chat WhatsApp Admin</a>
+      <a href="https://wa.me/6281234567890?text=Halo%20Admin%20Batik%20Wistara!" target="_blank">
+        📱 Chat WhatsApp Admin
+      </a>
       `;
       quick_replies = [{ label: "🔙 Kembali ke Menu", value: "menu" }];
       next_state = "admin";
     }
 
-    // --- DEFAULT / SALAH INPUT ---
+    // --- DEFAULT ---
     else {
-      reply = `
-      ✨ <b>Selamat datang di Batik Wistara!</b> ✨<br>
-      Silakan pilih layanan:<br><br>
-      1️⃣ Katalog Produk<br>
-      2️⃣ Berita Terbaru<br>
-      3️⃣ Alamat & Jam Buka<br>
-      0️⃣ Hubungi Admin<br><br>
-      Ketik angka atau pilih tombol di bawah 👇`;
-      quick_replies = [
-        { label: "1️⃣ Katalog Produk", value: "1" },
-        { label: "2️⃣ Berita Terbaru", value: "2" },
-        { label: "3️⃣ Alamat & Jam Buka", value: "3" },
-        { label: "0️⃣ Hubungi Admin", value: "0" }
-      ];
+      reply = `❓ Maaf, saya tidak mengerti perintah "<b>${message}</b>".<br>Ketik <b>menu</b> untuk kembali.`;
+      quick_replies = [{ label: "🏠 Kembali ke Menu", value: "menu" }];
       next_state = "menu";
     }
 
-    // --- Kirim respon JSON ---
-    res.json({ reply, quick_replies, next_state });
+    sessions[sid].state = next_state;
+
+    // === Simpan riwayat ke Laravel ===
+    await fetch(saveChatAPI, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: sid,
+        user_message: message,
+        bot_reply: reply
+      })
+    });
+
+    // === Kirim balasan ke frontend ===
+    res.json({ reply, quick_replies, next_state, session_id: sid });
+
   } catch (err) {
-    console.error("❌ Error:", err);
+    console.error("❌ Chatbot Error:", err);
     res.status(500).json({
-      reply: "⚠️ Terjadi kesalahan di server chatbot.",
+      reply: "⚠️ Terjadi kesalahan server chatbot.",
       quick_replies: [{ label: "🔙 Kembali ke Menu", value: "menu" }]
     });
   }
