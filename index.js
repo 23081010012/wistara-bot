@@ -13,16 +13,31 @@ app.use(express.json());
 let qrCodeData = "";
 let connectionStatus = "🔄 Starting...";
 let lastError = "";
-let botStarted = false; // ✅ cegah listen server dua kali
+let sock = null; // socket WhatsApp global
 
+// ======= RULE-BASED RESPON CHATBOT =======
+function getBotReply(text) {
+  text = text.toLowerCase();
+  if (text.includes("halo") || text.includes("hai"))
+    return "Halo! 👋 Selamat datang di Batik Wistara. Ada yang bisa kami bantu?";
+  if (text.includes("produk"))
+    return "Kami menyediakan berbagai koleksi batik premium dengan motif khas Nusantara.";
+  if (text.includes("harga"))
+    return "Harga batik kami mulai dari Rp150.000 hingga Rp500.000, tergantung model dan bahan.";
+  if (text.includes("alamat"))
+    return "Toko kami berlokasi di Surabaya, Jawa Timur 💙";
+  if (text.includes("kontak") || text.includes("whatsapp"))
+    return "Hubungi kami di WhatsApp 0812-xxxx-xxxx untuk pemesanan cepat!";
+  if (text.includes("terima kasih") || text.includes("makasih"))
+    return "Sama-sama 😊 Senang bisa membantu!";
+  return "Maaf, saya belum paham 😅. Coba ketik *produk*, *harga*, *alamat*, atau *kontak*.";
+}
+
+// ======= MULAI BOT WHATSAPP =======
 async function startBot() {
   try {
     const { state, saveCreds } = await useMultiFileAuthState("./auth");
-
-    const sock = makeWASocket({
-      auth: state,
-      printQRInTerminal: false,
-    });
+    sock = makeWASocket({ auth: state, printQRInTerminal: false });
 
     sock.ev.on("creds.update", saveCreds);
 
@@ -31,14 +46,13 @@ async function startBot() {
       console.log("DEBUG:", update);
 
       if (qr) {
-        console.log("📱 QR code diterima");
         qrCodeData = await qrcode.toDataURL(qr);
-        connectionStatus = "📲 QR Code tersedia — silakan scan";
+        connectionStatus = "📲 QR Code tersedia — silakan scan di /qr";
       }
 
       if (connection === "open") {
         console.log("✅ Terhubung ke WhatsApp");
-        connectionStatus = "✅ Terhubung ke WhatsApp";
+        connectionStatus = "✅ Bot aktif dan terhubung ke WhatsApp";
         qrCodeData = "";
       }
 
@@ -47,19 +61,19 @@ async function startBot() {
         console.log("❌ Terputus:", reason);
         connectionStatus = `❌ Terputus: ${reason}`;
         lastError = reason;
-
-        setTimeout(() => startBot(), 5000); // hanya reconnect bot, bukan server
+        setTimeout(startBot, 5000); // reconnect otomatis
       }
     });
 
+    // 🔁 Saat pesan masuk ke WhatsApp
     sock.ev.on("messages.upsert", async ({ messages }) => {
       const msg = messages[0];
       if (!msg.message || msg.key.fromMe) return;
       const text = msg.message.conversation?.toLowerCase() || "";
+      const from = msg.key.remoteJid;
 
-      if (text.includes("halo")) {
-        await sock.sendMessage(msg.key.remoteJid, { text: "Hai 👋, ini chatbot REST API!" });
-      }
+      const reply = getBotReply(text);
+      await sock.sendMessage(from, { text: reply });
     });
 
   } catch (err) {
@@ -70,16 +84,7 @@ async function startBot() {
   }
 }
 
-// ✅ Jalankan server Express hanya SEKALI
-if (!botStarted) {
-  botStarted = true;
-  const port = process.env.PORT || 3000;
-  app.listen(port, () => console.log(`🚀 REST API aktif di port ${port}`));
-  startBot(); // mulai bot
-}
-
-// --- ROUTES ---
-
+// ======= ROUTES =======
 app.get("/qr", (req, res) => {
   if (!qrCodeData) {
     return res.send(`
@@ -111,9 +116,28 @@ app.get("/status", (req, res) => {
   `);
 });
 
-app.post("/send", async (req, res) => {
-  res.json({
-    success: false,
-    info: "Bot on, tapi endpoint send perlu koneksi socket global di versi berikut",
-  });
+// 🌐 === ENDPOINT UNTUK WEBSITE ===
+app.post("/api/chat", async (req, res) => {
+  const { message } = req.body;
+  if (!message) return res.json({ reply: "Pesan kosong." });
+
+  const reply = getBotReply(message);
+
+  // (opsional) kirim juga pesan ke WhatsApp admin
+  try {
+    if (sock?.user) {
+      await sock.sendMessage("62812xxxxxxx@s.whatsapp.net", {
+        text: `💬 Chat dari Website: ${message}`,
+      });
+    }
+  } catch (err) {
+    console.log("⚠️ Gagal kirim ke admin WA:", err.message);
+  }
+
+  res.json({ reply });
 });
+
+// Jalankan server
+const port = process.env.PORT || 3000;
+app.listen(port, () => console.log(`🚀 REST API aktif di port ${port}`));
+startBot();
