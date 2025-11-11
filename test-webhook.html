@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Webhook Fonnte - Wistara Chatbot</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 500px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f8f9fb;
+      border-radius: 12px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    h2 { color: #071739; text-align: center; }
+    label { display:block; margin-top: 15px; font-weight: bold; }
+    input, textarea {
+      width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;
+    }
+    button {
+      margin-top: 20px;
+      background: #071739;
+      color: #fff;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button:hover { background: #0a214f; }
+    pre {
+      background: #222; color: #0f0;
+      padding: 10px; border-radius: 8px; overflow-x: auto;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <h2>🔁 Test Webhook Fonnte - Wistara Chatbot</h2>
+
+  <label>Nomor HP (contoh: 628123456789)</label>
+  <input type="text" id="phone" placeholder="Masukkan nomor WA..." value="62895381110035">
+
+  <label>Pesan</label>
+  <textarea id="message" rows="3" placeholder="Ketik pesan uji...">halo</textarea>
+
+  <button onclick="sendWebhook()">Kirim ke Webhook</button>
+
+  <h3>📦 Hasil:</h3>
+  <pre id="result">Belum ada data.</pre>
+
+  <script>
+    async function sendWebhook() {
+      const phone = document.getElementById('phone').value.trim();
+      const message = document.getElementById('message').value.trim();
+      const resultBox = document.getElementById('result');
+
+      if (!phone || !message) {
+        alert("Nomor dan pesan wajib diisi!");
+        return;
+      }
+
+      resultBox.textContent = "⏳ Mengirim...";
+      try {
+        const res = await fetch("https://chatbot.batikwistara.com/api/fonnte-webhook", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone, message })
+        });
+
+        const text = await res.text();
+        resultBox.textContent = `✅ Status: ${res.status}\n\n${text}`;
+      } catch (err) {
+        resultBox.textContent = `❌ Gagal: ${err}`;
+      }
+    }
+  </script>
+</body>
+</html>
