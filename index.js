@@ -176,6 +176,15 @@ app.get("/", (req, res) => {
   `);
 });
 
+app.get("/api/chat", (req, res) => {
+  res.send(`
+    <html><body style="font-family:sans-serif; text-align:center; padding-top:50px">
+      <h2>✅ Wistara Chatbot API Aktif</h2>
+      <p>Gunakan <code>POST /api/chat</code> untuk mengirim pesan ke chatbot.</p>
+    </body></html>
+  `);
+});
+
 // ===============================
 // 🚀 JALANKAN SERVER
 // ===============================
