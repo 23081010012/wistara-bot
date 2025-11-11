@@ -1,5 +1,5 @@
 // ===============================
-// 🤖 WISTARA CHATBOT REST API
+// 🤖 WISTARA CHATBOT REST API (Web + WhatsApp Fonnte)
 // ===============================
 import express from "express";
 import cors from "cors";
@@ -14,13 +14,13 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // Ganti dengan nomor admin WhatsApp kamu (tanpa tanda +)
-const ADMIN_WA = "62895381110035"; 
+const ADMIN_WA = process.env.ADMIN_WA || "62895381110035";
+const FONNTE_TOKEN = process.env.FONNTE_TOKEN; // tambahkan di .env
 
 // ===============================
-// 🧠 LOGIKA CHATBOT
+// 🧠 LOGIKA CHATBOT GLOBAL
 // ===============================
-app.post("/api/chat", async (req, res) => {
-  const { message } = req.body;
+async function getBotReply(message) {
   const msg = (message || "").toLowerCase().trim();
   console.log("💬 Pesan diterima:", msg);
 
@@ -36,25 +36,11 @@ app.post("/api/chat", async (req, res) => {
       if (!Array.isArray(produkData) || produkData.length === 0) {
         reply = "⚠️ Maaf, katalog produk belum tersedia.";
       } else {
-        reply = "<b>🛍️ Katalog Produk Terbaru:</b><br>";
-        produkData.slice(0, 3).forEach((p) => {
-          reply += `
-            <div style='margin-top:10px; border-bottom:1px solid #eee; padding-bottom:10px;'>
-              <img src='https://batikwistara.com/storage/${p.gambar}' 
-                width='100' 
-                style='border-radius:8px; margin-bottom:4px;'><br>
-              <b>${p.nama_produk}</b><br>
-              💰 Rp${parseInt(p.harga).toLocaleString("id-ID")}<br>
-              <a href='${p.link_shopee || "#"}' target='_blank'>🛒 Beli di Shopee</a><br>
-              ${p.link_tiktok ? `<a href='${p.link_tiktok}' target='_blank'>🎥 TikTok Shop</a>` : ""}
-            </div>`;
+        reply = "🛍️ *Katalog Produk Terbaru:*\n\n";
+        produkData.slice(0, 3).forEach((p, i) => {
+          reply += `${i + 1}. *${p.nama_produk}*\n💰 Rp${parseInt(p.harga).toLocaleString("id-ID")}\n🔗 https://batikwistara.com/produk/${p.slug}\n\n`;
         });
-
-        quick_replies = [
-          { label: "Lihat Semua Produk ➜", value: "https://batikwistara.com/katalog" },
-          { label: "💬 Hubungi Admin", value: "admin" },
-          { label: "🔙 Kembali ke Menu Utama", value: "menu" },
-        ];
+        reply += "Ketik *admin* untuk tanya produk atau klik link katalog 👇\nhttps://batikwistara.com/katalog";
       }
     }
 
@@ -66,43 +52,21 @@ app.post("/api/chat", async (req, res) => {
       if (!Array.isArray(beritaData) || beritaData.length === 0) {
         reply = "⚠️ Belum ada berita terbaru.";
       } else {
-        reply = "<b>📰 Berita Terbaru:</b><br>";
-        beritaData.slice(0, 3).forEach((b) => {
-          reply += `• <a href="https://batikwistara.com/berita/${b.slug}" target="_blank">${b.judul}</a><br>`;
+        reply = "📰 *Berita Terbaru:*\n\n";
+        beritaData.slice(0, 3).forEach((b, i) => {
+          reply += `${i + 1}. ${b.judul}\n🔗 https://batikwistara.com/berita/${b.slug}\n\n`;
         });
-
-        quick_replies = [
-          { label: "Lihat Semua Berita ➜", value: "https://batikwistara.com/berita" },
-          { label: "💬 Hubungi Admin", value: "admin" },
-          { label: "🔙 Kembali ke Menu Utama", value: "menu" },
-        ];
       }
     }
 
     // === Menu Alamat ===
     else if (msg.includes("alamat") || msg.includes("lokasi")) {
-      reply = `
-        📍 <b>Alamat Batik Wistara:</b><br>
-        Jl. Ketintang No.88, Surabaya<br>
-        🕒 Buka: 09.00–17.00 WIB<br><br>
-        <a href="https://maps.app.goo.gl/TY4uB1QNy72n97FYA" target="_blank">🗺️ Lihat di Google Maps</a>
-      `;
-      quick_replies = [
-        { label: "💬 Hubungi Admin", value: "admin" },
-        { label: "🔙 Kembali ke Menu", value: "menu" },
-      ];
+      reply = `📍 *Alamat Batik Wistara:*\nJl. Ketintang No.88, Surabaya\n🕒 Buka: 09.00–17.00 WIB\n\n🗺️ https://maps.app.goo.gl/TY4uB1QNy72n97FYA`;
     }
 
     // === Menu Hubungi Admin ===
     else if (msg.includes("admin") || msg === "0") {
-      reply = `
-        📞 Klik tombol di bawah untuk menghubungi admin kami via WhatsApp.<br>
-        Kami siap membantu Anda 💛
-      `;
-      quick_replies = [
-        { label: "💬 Chat Admin di WhatsApp", value: `https://wa.me/${ADMIN_WA}?text=Halo%20admin%2C%20saya%20mau%20bertanya.` },
-        { label: "🔙 Kembali ke Menu", value: "menu" },
-      ];
+      reply = `📞 Silakan klik link berikut untuk chat langsung dengan admin kami:\n👉 https://wa.me/${ADMIN_WA}?text=Halo%20admin%2C%20saya%20ingin%20bertanya.`;
     }
 
     // === Menu Utama ===
@@ -110,38 +74,80 @@ app.post("/api/chat", async (req, res) => {
       const hour = new Date().getHours();
       const greet =
         hour < 12 ? "Selamat pagi ☀️" : hour < 18 ? "Selamat siang 🌤️" : "Selamat malam 🌙";
-
-      reply = `
-        ${greet}! ✨<br>
-        Selamat datang di <b>Batik Wistara</b>.<br>
-        Silakan pilih layanan berikut 👇
-      `;
-      quick_replies = [
-        { label: "🛍️ Katalog Produk", value: "produk" },
-        { label: "📰 Berita Terbaru", value: "berita" },
-        { label: "📍 Alamat & Jam Buka", value: "alamat" },
-        { label: "💬 Hubungi Admin", value: "admin" },
-      ];
+      reply = `${greet}!\nSelamat datang di *Batik Wistara*.\nSilakan pilih layanan berikut:\n\n1️⃣ Produk\n2️⃣ Berita Terbaru\n3️⃣ Alamat & Jam Buka\n0️⃣ Hubungi Admin`;
     }
 
-    res.json({ reply, quick_replies });
+    return { reply, quick_replies };
   } catch (err) {
     console.error("❌ Error chatbot:", err);
-    res.json({
-      reply: "⚠️ Maaf, terjadi kesalahan pada server chatbot.",
-      quick_replies: [{ label: "🔁 Coba Lagi", value: "menu" }],
-    });
+    return { reply: "⚠️ Maaf, terjadi kesalahan pada server chatbot." };
+  }
+}
+
+// ===============================
+// 🌐 API UNTUK WEBSITE
+// ===============================
+app.post("/api/chat", async (req, res) => {
+  const { message } = req.body;
+  const response = await getBotReply(message);
+  res.json(response);
+});
+
+// ===============================
+// 🔁 WEBHOOK UNTUK FONNTE (WhatsApp)
+// ===============================
+app.post("/api/fonnte-webhook", async (req, res) => {
+  try {
+    const { phone, message } = req.body;
+    if (!phone || !message) return res.sendStatus(400);
+
+    console.log("💬 Pesan dari WhatsApp:", phone, message);
+    const { reply } = await getBotReply(message);
+    await sendFonnteMessage(phone, reply);
+
+    res.sendStatus(200);
+  } catch (err) {
+    console.error("❌ Error webhook:", err);
+    res.sendStatus(500);
   }
 });
 
 // ===============================
-// ⚙️ ROUTE STATUS UNTUK CEK
+// 💬 FUNGSI KIRIM PESAN VIA FONNTE
+// ===============================
+async function sendFonnteMessage(target, message) {
+  try {
+    const res = await fetch("https://api.fonnte.com/send", {
+      method: "POST",
+      headers: {
+        Authorization: FONNTE_TOKEN,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        target,
+        message,
+        delay: 1,
+      }),
+    });
+    const data = await res.json();
+    console.log("✅ Pesan terkirim via Fonnte:", data);
+  } catch (err) {
+    console.error("❌ Gagal kirim pesan via Fonnte:", err);
+  }
+}
+
+// ===============================
+// ⚙️ STATUS SERVER
 // ===============================
 app.get("/", (req, res) => {
   res.send(`
     <html><body style="font-family:sans-serif; text-align:center; padding-top:40px;">
-      <h2>✅ Wistara Chatbot API aktif dan berjalan di server!</h2>
-      <p>Gunakan endpoint: <code>/api/chat</code></p>
+      <h2>✅ Wistara Chatbot aktif (Web + WhatsApp via Fonnte)</h2>
+      <p>Gunakan endpoint:</p>
+      <ul style="list-style:none;">
+        <li>🌐 <code>/api/chat</code> — untuk website</li>
+        <li>💬 <code>/api/fonnte-webhook</code> — untuk WhatsApp</li>
+      </ul>
     </body></html>
   `);
 });
@@ -149,4 +155,4 @@ app.get("/", (req, res) => {
 // ===============================
 // 🚀 JALANKAN SERVER
 // ===============================
-app.listen(PORT, () => console.log(`🚀 Chatbot Batik Wistara aktif di port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Wistara Chatbot aktif di port ${PORT}`));
