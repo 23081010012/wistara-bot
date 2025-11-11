@@ -73,25 +73,30 @@ async function getBotReply(sender, message) {
     }
 
     // === MENU CEK PESANAN ===
-    else if (msg.startsWith("cek") || ["4", "pesanan"].includes(msg)) {
-      // Ambil ID dari pesan, misal: "cek WST-20251111-ABCD"
-      const id = msg.replace(/cek|pesanan/gi, "").trim();
+    else if (msg.startsWith("cek") || msg === "4" || msg.includes("pesanan")) {
+      // Jika hanya mengetik angka 4 tanpa ID
+      if (msg === "4" || msg === "pesanan") {
+        reply = "🔍 Untuk cek status pesanan, ketik:\n\n*cek [ID Pesanan]*\nContoh: *cek WST-20251111-JGZB*";
+      } 
+      else {
+        const id = msg.replace(/cek|pesanan/gi, "").trim();
+        if (!id) {
+          reply = "🔍 Silakan kirim *cek [ID pesanan]* untuk melihat status.\nContoh: *cek WST-20251111-JGZB*";
+        } else {
+          try {
+            const res = await fetch(`${API_BASE}/order/${id}`);
+            if (!res.ok) throw new Error("not found");
+            const order = await res.json();
 
-      if (!id) {
-        reply = "🔍 Silakan kirim *cek [ID pesanan]* untuk melihat status.\nContoh: *cek WST-20251111-JGZB*";
-      } else {
-        try {
-          const res = await fetch(`${API_BASE}/order/${id}`);
-          if (!res.ok) throw new Error("not found");
-          const order = await res.json();
-
-          reply = `🧾 *Status Pesanan Anda*\n\n🆔 *ID:* ${order.id}\n👤 *Nama:* ${order.nama}\n📞 *Telepon:* ${order.telepon}\n💰 *Total:* Rp${parseInt(order.total).toLocaleString("id-ID")}\n💳 *Pembayaran:* ${order.status_pembayaran}\n🚚 *Status:* ${order.status}\n📅 *Tanggal:* ${new Date(order.created_at).toLocaleDateString("id-ID")}\n💼 *Metode:* ${order.metode_pembayaran}\n\nTerima kasih telah berbelanja di *Batik Wistara*! 💛`;
-        } catch (err) {
-          console.error("❌ Gagal ambil data pesanan:", err);
-          reply = "⚠️ Maaf, pesanan tidak ditemukan atau server sedang sibuk.";
+            reply = `🧾 *Status Pesanan Anda*\n\n🆔 *ID:* ${order.id}\n👤 *Nama:* ${order.nama}\n📞 *Telepon:* ${order.telepon}\n💰 *Total:* Rp${parseInt(order.total).toLocaleString("id-ID")}\n💳 *Pembayaran:* ${order.status_pembayaran}\n🚚 *Status:* ${order.status}\n📅 *Tanggal:* ${new Date(order.created_at).toLocaleDateString("id-ID")}\n💼 *Metode:* ${order.metode_pembayaran}\n\nTerima kasih telah berbelanja di *Batik Wistara*! 💛`;
+          } catch (err) {
+            console.error("❌ Gagal ambil data pesanan:", err);
+            reply = "⚠️ Maaf, pesanan tidak ditemukan atau server sedang sibuk.";
+          }
         }
       }
     }
+
 
     // === MENU ALAMAT ===
     else if (["3", "alamat", "lokasi"].includes(msg)) {
