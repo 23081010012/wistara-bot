@@ -25,8 +25,8 @@ async function getBotReply(message) {
   let reply = "";
 
   try {
-    // === Menu Produk ===
-    if (msg.includes("produk") || msg.includes("katalog")) {
+    // === MENU PRODUK (1 / produk / katalog) ===
+    if (["1", "produk", "katalog"].includes(msg)) {
       const produkRes = await fetch("https://batikwistara.com/api/produk");
       const produkData = await produkRes.json();
 
@@ -37,12 +37,12 @@ async function getBotReply(message) {
         produkData.slice(0, 3).forEach((p, i) => {
           reply += `${i + 1}. *${p.nama_produk}*\n💰 Rp${parseInt(p.harga).toLocaleString("id-ID")}\n🔗 https://batikwistara.com/produk/${p.slug}\n\n`;
         });
-        reply += "Ketik *admin* untuk tanya produk atau klik link katalog 👇\nhttps://batikwistara.com/katalog";
+        reply += "Ketik *0* untuk chat admin, atau lihat semua produk di:\n👉 https://batikwistara.com/katalog";
       }
     }
 
-    // === Menu Berita ===
-    else if (msg.includes("berita")) {
+    // === MENU BERITA (2 / berita) ===
+    else if (["2", "berita"].includes(msg)) {
       const beritaRes = await fetch("https://batikwistara.com/api/berita");
       const beritaData = await beritaRes.json();
 
@@ -53,25 +53,35 @@ async function getBotReply(message) {
         beritaData.slice(0, 3).forEach((b, i) => {
           reply += `${i + 1}. ${b.judul}\n🔗 https://batikwistara.com/berita/${b.slug}\n\n`;
         });
+        reply += "Ketik *0* untuk chat admin, atau lihat semua berita di:\n👉 https://batikwistara.com/berita";
       }
     }
 
-    // === Menu Alamat ===
-    else if (msg.includes("alamat") || msg.includes("lokasi")) {
-      reply = `📍 *Alamat Batik Wistara:*\nJl. Ketintang No.88, Surabaya\n🕒 Buka: 09.00–17.00 WIB\n\n🗺️ https://maps.app.goo.gl/TY4uB1QNy72n97FYA`;
+    // === MENU ALAMAT (3 / alamat / lokasi) ===
+    else if (["3", "alamat", "lokasi"].includes(msg)) {
+      reply = `📍 *Alamat Batik Wistara:*\nJl. Ketintang No.88, Surabaya\n🕒 Buka: 09.00–17.00 WIB\n\n🗺️ https://maps.app.goo.gl/TY4uB1QNy72n97FYA\n\nKetik *0* untuk chat admin.`;
     }
 
-    // === Menu Hubungi Admin ===
-    else if (msg.includes("admin") || msg === "0") {
-      reply = `📞 Silakan klik link berikut untuk chat langsung dengan admin kami:\n👉 https://wa.me/${ADMIN_WA}?text=Halo%20admin%2C%20saya%20ingin%20bertanya.`;
+    // === MENU HUBUNGI ADMIN (0 / admin) ===
+    else if (["0", "admin"].includes(msg)) {
+      reply = `📞 Silakan klik link berikut untuk chat langsung dengan admin kami:\n👉 https://wa.me/${ADMIN_WA}?text=Halo%20admin%2C%20saya%20ingin%20bertanya%20tentang%20produk%20Batik%20Wistara.`;
     }
 
-    // === Menu Utama ===
+    // === MENU UTAMA (default) ===
     else {
       const hour = new Date().getHours();
       const greet =
         hour < 12 ? "Selamat pagi ☀️" : hour < 18 ? "Selamat siang 🌤️" : "Selamat malam 🌙";
-      reply = `${greet}!\nSelamat datang di *Batik Wistara*.\nSilakan pilih layanan berikut:\n\n1️⃣ Produk\n2️⃣ Berita Terbaru\n3️⃣ Alamat & Jam Buka\n0️⃣ Hubungi Admin`;
+      reply = `${greet}!
+Selamat datang di *Batik Wistara* 👋
+
+Silakan pilih layanan berikut:
+1️⃣ *Produk*
+2️⃣ *Berita Terbaru*
+3️⃣ *Alamat & Jam Buka*
+0️⃣ *Hubungi Admin*
+
+💡 *Balas dengan angka (1–3 atau 0)* untuk memilih menu.`;
     }
 
     return reply;
@@ -105,14 +115,14 @@ app.post("/api/fonnte-webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    // Dapatkan balasan otomatis dari bot
+    // 🔁 Ambil balasan dari fungsi bot
     const reply = await getBotReply(message);
 
-    // Kirim ke WhatsApp via API Fonnte
+    // 💬 Kirim balasan ke WhatsApp via API Fonnte
     const fonnteRes = await fetch("https://api.fonnte.com/send", {
       method: "POST",
       headers: {
-        Authorization: "gxmbpys5Ysp8TNJeBaUo",
+        Authorization: FONNTE_TOKEN,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
