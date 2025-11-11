@@ -95,22 +95,46 @@ app.post("/api/chat", async (req, res) => {
 
 // ===============================
 // 🔁 WEBHOOK UNTUK FONNTE (WhatsApp)
-// ===============================
+// ================================
 app.post("/api/fonnte-webhook", async (req, res) => {
   try {
-    const { phone, message } = req.body;
-    if (!phone || !message) return res.sendStatus(400);
+    console.log("📥 Webhook Fonnte masuk:", req.body);
 
-    console.log("💬 Pesan dari WhatsApp:", phone, message);
-    const { reply } = await getBotReply(message);
-    await sendFonnteMessage(phone, reply);
+    // Baca semua kemungkinan field yang dikirim
+    const sender = req.body.sender || req.body.number || req.body.phone;
+    const message = req.body.message || req.body.text || "";
+
+    if (!sender) {
+      console.warn("⚠️ Webhook tanpa nomor pengirim, diabaikan.");
+      return res.sendStatus(200);
+    }
+
+    // Balasan otomatis sederhana
+    const reply = `Hai ${req.body.pushName || "teman"} 👋\nTerima kasih sudah menghubungi Batik Wistara!`;
+
+    // Kirim balasan lewat API Fonnte
+    const fonnteRes = await fetch("https://api.fonnte.com/send", {
+      method: "POST",
+      headers: {
+        Authorization: process.env.FONNTE_TOKEN,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        target: sender,
+        message: reply,
+      }),
+    });
+
+    const result = await fonnteRes.json();
+    console.log("✅ Balasan terkirim ke WA:", result);
 
     res.sendStatus(200);
   } catch (err) {
-    console.error("❌ Error webhook:", err);
+    console.error("❌ Error di webhook Fonnte:", err);
     res.sendStatus(500);
   }
 });
+
 
 // ===============================
 // 💬 FUNGSI KIRIM PESAN VIA FONNTE
