@@ -1,5 +1,5 @@
 // ===============================
-// 🤖 WISTARA CHATBOT REST API (Web + WhatsApp Fonnte)
+// 🤖 WISTARA CHATBOT REST API (Web + WhatsApp Fonnte + Cek Pesanan)
 // ===============================
 import express from "express";
 import cors from "cors";
@@ -15,17 +15,24 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_WA = process.env.ADMIN_WA || "62895381110035";
 const FONNTE_TOKEN = process.env.FONNTE_TOKEN;
 
-// ===============================
-// 💾 STATUS USER (active / paused)
-// ===============================
-const userStates = new Map(); // { sender: "active" | "paused" }
+// 🧠 Simpan status apakah user sedang ngobrol dengan admin
+const activeSessions = new Map();
 
 // ===============================
-// 🧠 LOGIKA CHATBOT
+// 🧠 LOGIKA CHATBOT (Web + WhatsApp)
 // ===============================
-async function getBotReply(message) {
+async function getBotReply(sender, message) {
   const msg = (message || "").toLowerCase().trim();
-  console.log("💬 Pesan diterima:", msg);
+  console.log("💬 Pesan dari", sender, ":", msg);
+
+  // Jika user sedang di mode admin, bot diam sampai user ketik "menu"
+  if (activeSessions.get(sender) === "pause") {
+    if (msg === "menu") {
+      activeSessions.delete(sender);
+      return "✨ *Chatbot diaktifkan kembali!*\nSilakan ketik angka 1–4 untuk memilih menu.";
+    }
+    return null;
+  }
 
   let reply = "";
 
@@ -67,12 +74,37 @@ async function getBotReply(message) {
       reply = `📍 *Alamat Batik Wistara:*\nJl. Tambak Medokan Ayu VI C No.56B, Medokan Ayu, Kec. Rungkut, Surabaya, Jawa Timur 60295\n🕒 Buka: 08.00–17.00 WIB\n\n🗺️ https://maps.app.goo.gl/WqHPo5eNBDqHykhM8\n\nKetik *0* untuk chat admin.`;
     }
 
-    // === MENU HUBUNGI ADMIN (0 / admin) ===
-    else if (["0", "admin"].includes(msg)) {
-      reply = `📞 Admin akan segera membalas Anda, Silahkan ketik pertanyaan anda\n\nTerima kasih telah menunggu 🙏\nKetik *menu* jika ingin kembali ke chatbot.`;
+    // === CEK PESANAN (4 / cek / pesanan / id) ===
+    else if (["4", "cek", "pesanan"].some(k => msg.includes(k))) {
+      const id = msg.replace(/cek|pesanan/gi, "").trim();
+
+      if (!id) {
+        reply = "🔍 Silakan kirim *cek [ID pesanan]* untuk melihat status.\nContoh: *cek 11*";
+      } else {
+        try {
+          const res = await fetch(`https://batikwistara.com/api/cek-pesanan/${id}`);
+          const data = await res.json();
+
+          if (data.status === "not_found") {
+            reply = `❌ Maaf, pesanan dengan ID *${id}* tidak ditemukan.`;
+          } else {
+            const p = data.data;
+            reply = `🧾 *Status Pesanan Anda*\n\n🆔 *ID:* ${p.id}\n👤 *Nama:* ${p.nama}\n📞 *Telepon:* ${p.telepon}\n💰 *Total:* Rp${p.total}\n💳 *Pembayaran:* ${p.status_pembayaran}\n🚚 *Status:* ${p.status_pesanan}\n📅 *Tanggal:* ${p.tanggal}\n💼 *Metode:* ${p.metode}\n\nTerima kasih telah berbelanja di *Batik Wistara*! 💛`;
+          }
+        } catch (err) {
+          console.error("Error cek pesanan:", err);
+          reply = "⚠️ Gagal mengambil data pesanan. Coba lagi nanti.";
+        }
+      }
     }
 
-    // === MENU UTAMA ===
+    // === HUBUNGI ADMIN (0 / admin) ===
+    else if (["0", "admin"].includes(msg)) {
+      reply = `📞 Admin akan segera membalas anda.\nBot akan berhenti sementara sampai Anda ketik *menu* untuk melanjutkan kembali.`;
+      activeSessions.set(sender, "pause");
+    }
+
+    // === MENU UTAMA (default) ===
     else {
       const hour = new Date().getHours();
       const greet =
@@ -84,9 +116,10 @@ Silakan pilih layanan berikut:
 1️⃣ *Produk*
 2️⃣ *Berita Terbaru*
 3️⃣ *Alamat & Jam Buka*
+4️⃣ *Cek Status Pesanan*
 0️⃣ *Hubungi Admin*
 
-💡 *Balas dengan angka (1–3 atau 0)* untuk memilih menu.`;
+💡 *Balas dengan angka (1–4 atau 0)* untuk memilih menu.`;
     }
 
     return reply;
@@ -97,54 +130,42 @@ Silakan pilih layanan berikut:
 }
 
 // ===============================
-// 💬 WEBHOOK UNTUK FONNTE (WHATSAPP)
+// 🌐 CHATBOT UNTUK WEBSITE
+// ===============================
+app.post("/api/chat", async (req, res) => {
+  const { message } = req.body;
+  const reply = await getBotReply("web", message);
+  res.json({ reply });
+});
+
+// ===============================
+// 💬 WEBHOOK UNTUK WHATSAPP FONNTE
 // ===============================
 app.post("/api/fonnte-webhook", async (req, res) => {
   try {
     const sender = req.body.sender;
-    const message = (req.body.message || "").toLowerCase().trim();
+    const message = req.body.message;
 
     if (!sender || !message) {
       console.warn("⚠️ Webhook tanpa data pengirim, diabaikan.");
       return res.sendStatus(200);
     }
 
-    const currentState = userStates.get(sender) || "active";
+    const reply = await getBotReply(sender, message);
 
-    // ✅ Jika user ketik 'menu' → aktifkan bot kembali
-    if (message === "menu") {
-      userStates.set(sender, "active");
+    if (reply) {
+      await fetch("https://api.fonnte.com/send", {
+        method: "POST",
+        headers: {
+          Authorization: FONNTE_TOKEN,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          target: sender,
+          message: reply,
+        }),
+      });
     }
-
-    // 🚫 Jika user sedang pause dan bukan mengetik 'menu' → abaikan
-    if (currentState === "paused" && message !== "menu") {
-      console.log(`🤫 ${sender} sedang dalam mode pause, pesan diabaikan.`);
-      return res.end("Ignored (paused)");
-    }
-
-    // 🧠 Dapatkan balasan chatbot
-    const reply = await getBotReply(message);
-
-    // 📴 Jika user mengetik admin / 0, ubah status ke paused
-    if (["0", "admin"].includes(message)) {
-      userStates.set(sender, "paused");
-    }
-
-    // 💬 Kirim ke WhatsApp via Fonnte
-    const fonnteRes = await fetch("https://api.fonnte.com/send", {
-      method: "POST",
-      headers: {
-        Authorization: FONNTE_TOKEN,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        target: sender,
-        message: reply,
-      }),
-    });
-
-    const result = await fonnteRes.json();
-    console.log("✅ Balasan terkirim ke WA:", result);
 
     res.end("OK");
   } catch (err) {
@@ -154,23 +175,14 @@ app.post("/api/fonnte-webhook", async (req, res) => {
 });
 
 // ===============================
-// 🌐 API UNTUK WEBSITE (optional)
-// ===============================
-app.post("/api/chat", async (req, res) => {
-  const { message } = req.body;
-  const reply = await getBotReply(message);
-  res.json({ reply });
-});
-
-// ===============================
 // ⚙️ STATUS SERVER
 // ===============================
 app.get("/", (req, res) => {
   res.send(`
     <html><body style="font-family:sans-serif; text-align:center; padding-top:40px;">
-      <h2>✅ Wistara Chatbot Aktif</h2>
-      <p>🌐 Website API: <code>/api/chat</code></p>
-      <p>💬 WhatsApp Webhook: <code>/api/fonnte-webhook</code></p>
+      <h2>✅ Wistara Chatbot Aktif (Web + WhatsApp)</h2>
+      <p>🌐 API Website: <code>/api/chat</code></p>
+      <p>💬 Webhook WhatsApp: <code>/api/fonnte-webhook</code></p>
     </body></html>
   `);
 });
@@ -178,6 +190,4 @@ app.get("/", (req, res) => {
 // ===============================
 // 🚀 JALANKAN SERVER
 // ===============================
-app.listen(PORT, () =>
-  console.log(`🚀 Wistara Chatbot aktif di port ${PORT}`)
-);
+app.listen(PORT, () => console.log(`🚀 Wistara Chatbot aktif di port ${PORT}`));
