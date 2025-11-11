@@ -69,7 +69,7 @@ async function getBotReply(message) {
 
     // === MENU HUBUNGI ADMIN (0 / admin) ===
     else if (["0", "admin"].includes(msg)) {
-      reply = `📞 Admin akan segera membalas Anda, terima kasih telah menunggu 🙏\n\nKetik *menu* jika ingin kembali ke chatbot.`;
+      reply = `📞 Admin akan segera membalas Anda, Silahkan ketik pertanyaan anda\n\nTerima kasih telah menunggu 🙏\nKetik *menu* jika ingin kembali ke chatbot.`;
     }
 
     // === MENU UTAMA ===
