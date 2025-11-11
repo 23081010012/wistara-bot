@@ -59,12 +59,12 @@ async function getBotReply(message) {
 
     // === MENU ALAMAT (3 / alamat / lokasi) ===
     else if (["3", "alamat", "lokasi"].includes(msg)) {
-      reply = `📍 *Alamat Batik Wistara:*\nJl. Ketintang No.88, Surabaya\n🕒 Buka: 09.00–17.00 WIB\n\n🗺️ https://maps.app.goo.gl/TY4uB1QNy72n97FYA\n\nKetik *0* untuk chat admin.`;
+      reply = `📍 *Alamat Batik Wistara:*\nJl. Tambak Medokan Ayu VI C No.56B, Medokan Ayu, Kec. Rungkut, Surabaya, Jawa Timur 60295\n🕒 Buka: 08.00–17.00 WIB\n\n🗺️ https://maps.app.goo.gl/WqHPo5eNBDqHykhM8\n\nKetik *0* untuk chat admin.`;
     }
 
     // === MENU HUBUNGI ADMIN (0 / admin) ===
     else if (["0", "admin"].includes(msg)) {
-      reply = `📞 Silakan klik link berikut untuk chat langsung dengan admin kami:\n👉 https://wa.me/${ADMIN_WA}?text=Halo%20admin%2C%20saya%20ingin%20bertanya%20tentang%20produk%20Batik%20Wistara.`;
+      reply = `📞 Admin akan segera membalas anda, Terima Kasih Telah menunggu`;
     }
 
     // === MENU UTAMA (default) ===
