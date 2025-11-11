@@ -1,5 +1,5 @@
 // ===============================
-// 🤖 WISTARA CHATBOT REST API (Web + WhatsApp Fonnte + API Laravel Unified)
+// 🤖 WISTARA CHATBOT REST API (Web + WhatsApp + Laravel API)
 // ===============================
 import express from "express";
 import cors from "cors";
@@ -14,23 +14,27 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const ADMIN_WA = process.env.ADMIN_WA || "62895381110035";
 const FONNTE_TOKEN = process.env.FONNTE_TOKEN;
+const API_BASE = process.env.WISTARA_API || "https://batikwistara.com/api";
 
-// 🔁 Map untuk menyimpan sesi aktif user
+// ===============================
+// 🔁 Map untuk menyimpan status sesi aktif (pause / aktif)
+// ===============================
 const activeSessions = new Map();
 
 // ===============================
-// 🧠 LOGIKA CHATBOT (Unified)
+// 🧠 LOGIKA UTAMA CHATBOT
 // ===============================
 async function getBotReply(sender, message) {
   const msg = (message || "").toLowerCase().trim();
   console.log("💬 Pesan dari", sender, ":", msg);
 
-  // Jika sedang dalam mode admin
+  // === Jika dalam mode pause ===
   if (activeSessions.get(sender) === "pause") {
     if (msg === "menu") {
       activeSessions.delete(sender);
       return "✨ *Chatbot diaktifkan kembali!*\nSilakan ketik angka 1–4 untuk memilih menu.";
     }
+    // Saat masih pause dan bukan "menu", biarkan kosong
     return null;
   }
 
@@ -39,7 +43,7 @@ async function getBotReply(sender, message) {
   try {
     // === MENU PRODUK ===
     if (["1", "produk", "katalog"].includes(msg)) {
-      const res = await fetch("https://batikwistara.com/api/produk");
+      const res = await fetch(`${API_BASE}/produk`);
       const data = await res.json();
 
       if (!Array.isArray(data) || data.length === 0) {
@@ -55,7 +59,7 @@ async function getBotReply(sender, message) {
 
     // === MENU BERITA ===
     else if (["2", "berita"].includes(msg)) {
-      const res = await fetch("https://batikwistara.com/api/berita");
+      const res = await fetch(`${API_BASE}/berita`);
       const data = await res.json();
 
       if (!Array.isArray(data) || data.length === 0) {
@@ -69,24 +73,22 @@ async function getBotReply(sender, message) {
     }
 
     // === MENU CEK PESANAN ===
-    else if (["4", "cek", "pesanan"].some(k => msg.includes(k))) {
+    else if (msg.startsWith("cek") || ["4", "pesanan"].includes(msg)) {
+      // Ambil ID dari pesan, misal: "cek WST-20251111-ABCD"
       const id = msg.replace(/cek|pesanan/gi, "").trim();
 
       if (!id) {
-        reply = "🔍 Silakan kirim *cek [ID pesanan]* untuk melihat status.\nContoh: *cek 11*";
+        reply = "🔍 Silakan kirim *cek [ID pesanan]* untuk melihat status.\nContoh: *cek WST-20251111-JGZB*";
       } else {
         try {
-          const res = await fetch(`https://batikwistara.com/api/pesanan/${id}`);
+          const res = await fetch(`${API_BASE}/order/${id}`);
+          if (!res.ok) throw new Error("not found");
           const order = await res.json();
 
-          if (!order || order.status === "not_found") {
-            reply = `❌ Maaf, pesanan dengan ID *${id}* tidak ditemukan.`;
-          } else {
-            reply = `🧾 *Status Pesanan Anda*\n\n🆔 *ID:* ${order.id}\n👤 *Nama:* ${order.nama}\n📞 *Telepon:* ${order.telepon}\n💰 *Total:* Rp${parseInt(order.total).toLocaleString("id-ID")}\n💳 *Pembayaran:* ${order.status_pembayaran}\n🚚 *Status:* ${order.status}\n📅 *Tanggal:* ${new Date(order.created_at).toLocaleDateString("id-ID")}\n💼 *Metode:* ${order.metode_pembayaran}\n\nTerima kasih telah berbelanja di *Batik Wistara*! 💛`;
-          }
+          reply = `🧾 *Status Pesanan Anda*\n\n🆔 *ID:* ${order.id}\n👤 *Nama:* ${order.nama}\n📞 *Telepon:* ${order.telepon}\n💰 *Total:* Rp${parseInt(order.total).toLocaleString("id-ID")}\n💳 *Pembayaran:* ${order.status_pembayaran}\n🚚 *Status:* ${order.status}\n📅 *Tanggal:* ${new Date(order.created_at).toLocaleDateString("id-ID")}\n💼 *Metode:* ${order.metode_pembayaran}\n\nTerima kasih telah berbelanja di *Batik Wistara*! 💛`;
         } catch (err) {
-          console.error("❌ Gagal mengambil data pesanan:", err);
-          reply = "⚠️ Maaf, server sedang tidak dapat mengambil data pesanan.";
+          console.error("❌ Gagal ambil data pesanan:", err);
+          reply = "⚠️ Maaf, pesanan tidak ditemukan atau server sedang sibuk.";
         }
       }
     }
@@ -98,26 +100,17 @@ async function getBotReply(sender, message) {
 
     // === MENU ADMIN ===
     else if (["0", "admin"].includes(msg)) {
-      reply = `📞 Admin akan segera membalas anda.\nBot akan berhenti sementara.\nKetik *menu* untuk mengaktifkan kembali bot.`;
+      reply = `📞 Admin akan segera membalas Anda.\nBot akan *berhenti sementara* agar Anda bisa chat bebas.\nKetik *menu* untuk mengaktifkan kembali bot.`;
       activeSessions.set(sender, "pause");
     }
 
-    // === MENU UTAMA ===
+    // === MENU UTAMA (DEFAULT) ===
     else {
       const hour = new Date().getHours();
       const greet =
         hour < 12 ? "Selamat pagi ☀️" : hour < 18 ? "Selamat siang 🌤️" : "Selamat malam 🌙";
-      reply = `${greet}!
-Selamat datang di *Batik Wistara* 👋
 
-Silakan pilih layanan berikut:
-1️⃣ *Produk*
-2️⃣ *Berita Terbaru*
-3️⃣ *Alamat & Jam Buka*
-4️⃣ *Cek Status Pesanan*
-0️⃣ *Hubungi Admin*
-
-💡 *Balas dengan angka (1–4 atau 0)* untuk memilih menu.`;
+      reply = `${greet}!\nSelamat datang di *Batik Wistara* 👋\n\nSilakan pilih layanan berikut:\n\n1️⃣ *Produk*\n2️⃣ *Berita Terbaru*\n3️⃣ *Alamat & Jam Buka*\n4️⃣ *Cek Status Pesanan*\n0️⃣ *Hubungi Admin*\n\n💡 *Balas dengan angka (1–4 atau 0)* untuk memilih menu.*`;
     }
 
     return reply;
@@ -128,7 +121,7 @@ Silakan pilih layanan berikut:
 }
 
 // ===============================
-// 🌐 API UNTUK WEBSITE
+// 🌐 ENDPOINT UNTUK WEBSITE
 // ===============================
 app.post("/api/chat", async (req, res) => {
   const { message } = req.body;
@@ -143,7 +136,6 @@ app.post("/api/fonnte-webhook", async (req, res) => {
   try {
     const sender = req.body.sender;
     const message = req.body.message;
-
     if (!sender || !message) return res.sendStatus(200);
 
     const reply = await getBotReply(sender, message);
@@ -175,9 +167,10 @@ app.post("/api/fonnte-webhook", async (req, res) => {
 app.get("/", (req, res) => {
   res.send(`
     <html><body style="font-family:sans-serif; text-align:center; padding-top:40px;">
-      <h2>✅ Wistara Chatbot Aktif (Web + WhatsApp)</h2>
-      <p>🌐 API Website: <code>/api/chat</code></p>
+      <h2>✅ Wistara Chatbot Aktif (Web + WhatsApp + Laravel API)</h2>
+      <p>🌐 Website API: <code>/api/chat</code></p>
       <p>💬 Webhook WhatsApp: <code>/api/fonnte-webhook</code></p>
+      <p>📦 API Pesanan Laravel: <code>${API_BASE}/order/[id]</code></p>
     </body></html>
   `);
 });
