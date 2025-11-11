@@ -16,7 +16,12 @@ const ADMIN_WA = process.env.ADMIN_WA || "62895381110035";
 const FONNTE_TOKEN = process.env.FONNTE_TOKEN;
 
 // ===============================
-// 🧠 LOGIKA CHATBOT (DIGUNAKAN DI WEBSITE & WHATSAPP)
+// 💾 STATUS USER (active / paused)
+// ===============================
+const userStates = new Map(); // { sender: "active" | "paused" }
+
+// ===============================
+// 🧠 LOGIKA CHATBOT
 // ===============================
 async function getBotReply(message) {
   const msg = (message || "").toLowerCase().trim();
@@ -64,10 +69,10 @@ async function getBotReply(message) {
 
     // === MENU HUBUNGI ADMIN (0 / admin) ===
     else if (["0", "admin"].includes(msg)) {
-      reply = `📞 Admin akan segera membalas anda, Silahkan ketik pertanyaan yang ingin anda tanyakan.\nTerima Kasih Telah menunggu`;
+      reply = `📞 Admin akan segera membalas Anda, terima kasih telah menunggu 🙏\n\nKetik *menu* jika ingin kembali ke chatbot.`;
     }
 
-    // === MENU UTAMA (default) ===
+    // === MENU UTAMA ===
     else {
       const hour = new Date().getHours();
       const greet =
@@ -92,33 +97,40 @@ Silakan pilih layanan berikut:
 }
 
 // ===============================
-// 🌐 CHATBOT UNTUK WEBSITE
-// ===============================
-app.post("/api/chat", async (req, res) => {
-  const { message } = req.body;
-  const reply = await getBotReply(message);
-  res.json({ reply });
-});
-
-// ===============================
-// 💬 CHATBOT UNTUK WHATSAPP (WEBHOOK FONNTE)
+// 💬 WEBHOOK UNTUK FONNTE (WHATSAPP)
 // ===============================
 app.post("/api/fonnte-webhook", async (req, res) => {
   try {
-    console.log("📥 Webhook Fonnte:", req.body);
-
     const sender = req.body.sender;
-    const message = req.body.message;
+    const message = (req.body.message || "").toLowerCase().trim();
 
     if (!sender || !message) {
       console.warn("⚠️ Webhook tanpa data pengirim, diabaikan.");
       return res.sendStatus(200);
     }
 
-    // 🔁 Ambil balasan dari fungsi bot
+    const currentState = userStates.get(sender) || "active";
+
+    // ✅ Jika user ketik 'menu' → aktifkan bot kembali
+    if (message === "menu") {
+      userStates.set(sender, "active");
+    }
+
+    // 🚫 Jika user sedang pause dan bukan mengetik 'menu' → abaikan
+    if (currentState === "paused" && message !== "menu") {
+      console.log(`🤫 ${sender} sedang dalam mode pause, pesan diabaikan.`);
+      return res.end("Ignored (paused)");
+    }
+
+    // 🧠 Dapatkan balasan chatbot
     const reply = await getBotReply(message);
 
-    // 💬 Kirim balasan ke WhatsApp via API Fonnte
+    // 📴 Jika user mengetik admin / 0, ubah status ke paused
+    if (["0", "admin"].includes(message)) {
+      userStates.set(sender, "paused");
+    }
+
+    // 💬 Kirim ke WhatsApp via Fonnte
     const fonnteRes = await fetch("https://api.fonnte.com/send", {
       method: "POST",
       headers: {
@@ -142,6 +154,15 @@ app.post("/api/fonnte-webhook", async (req, res) => {
 });
 
 // ===============================
+// 🌐 API UNTUK WEBSITE (optional)
+// ===============================
+app.post("/api/chat", async (req, res) => {
+  const { message } = req.body;
+  const reply = await getBotReply(message);
+  res.json({ reply });
+});
+
+// ===============================
 // ⚙️ STATUS SERVER
 // ===============================
 app.get("/", (req, res) => {
@@ -157,4 +178,6 @@ app.get("/", (req, res) => {
 // ===============================
 // 🚀 JALANKAN SERVER
 // ===============================
-app.listen(PORT, () => console.log(`🚀 Wistara Chatbot aktif di port ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`🚀 Wistara Chatbot aktif di port ${PORT}`)
+);
