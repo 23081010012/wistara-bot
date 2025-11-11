@@ -1,5 +1,5 @@
 // ===============================
-// 🤖 WISTARA CHATBOT REST API (Web + WhatsApp Fonnte + Cek Pesanan)
+// 🤖 WISTARA CHATBOT REST API (Web + WhatsApp Fonnte + API Laravel Unified)
 // ===============================
 import express from "express";
 import cors from "cors";
@@ -15,17 +15,17 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_WA = process.env.ADMIN_WA || "62895381110035";
 const FONNTE_TOKEN = process.env.FONNTE_TOKEN;
 
-// 🧠 Simpan status apakah user sedang ngobrol dengan admin
+// 🔁 Map untuk menyimpan sesi aktif user
 const activeSessions = new Map();
 
 // ===============================
-// 🧠 LOGIKA CHATBOT (Web + WhatsApp)
+// 🧠 LOGIKA CHATBOT (Unified)
 // ===============================
 async function getBotReply(sender, message) {
   const msg = (message || "").toLowerCase().trim();
   console.log("💬 Pesan dari", sender, ":", msg);
 
-  // Jika user sedang di mode admin, bot diam sampai user ketik "menu"
+  // Jika sedang dalam mode admin
   if (activeSessions.get(sender) === "pause") {
     if (msg === "menu") {
       activeSessions.delete(sender);
@@ -37,44 +37,38 @@ async function getBotReply(sender, message) {
   let reply = "";
 
   try {
-    // === MENU PRODUK (1 / produk / katalog) ===
+    // === MENU PRODUK ===
     if (["1", "produk", "katalog"].includes(msg)) {
-      const produkRes = await fetch("https://batikwistara.com/api/produk");
-      const produkData = await produkRes.json();
+      const res = await fetch("https://batikwistara.com/api/produk");
+      const data = await res.json();
 
-      if (!Array.isArray(produkData) || produkData.length === 0) {
+      if (!Array.isArray(data) || data.length === 0) {
         reply = "⚠️ Maaf, katalog produk belum tersedia.";
       } else {
         reply = "🛍️ *Katalog Produk Terbaru:*\n\n";
-        produkData.slice(0, 3).forEach((p, i) => {
+        data.slice(0, 3).forEach((p, i) => {
           reply += `${i + 1}. *${p.nama_produk}*\n💰 Rp${parseInt(p.harga).toLocaleString("id-ID")}\n🔗 https://batikwistara.com/produk/${p.slug}\n\n`;
         });
         reply += "Ketik *0* untuk chat admin, atau lihat semua produk di:\n👉 https://batikwistara.com/katalog";
       }
     }
 
-    // === MENU BERITA (2 / berita) ===
+    // === MENU BERITA ===
     else if (["2", "berita"].includes(msg)) {
-      const beritaRes = await fetch("https://batikwistara.com/api/berita");
-      const beritaData = await beritaRes.json();
+      const res = await fetch("https://batikwistara.com/api/berita");
+      const data = await res.json();
 
-      if (!Array.isArray(beritaData) || beritaData.length === 0) {
+      if (!Array.isArray(data) || data.length === 0) {
         reply = "⚠️ Belum ada berita terbaru.";
       } else {
         reply = "📰 *Berita Terbaru:*\n\n";
-        beritaData.slice(0, 3).forEach((b, i) => {
+        data.slice(0, 3).forEach((b, i) => {
           reply += `${i + 1}. ${b.judul}\n🔗 https://batikwistara.com/berita/${b.slug}\n\n`;
         });
-        reply += "Ketik *0* untuk chat admin, atau lihat semua berita di:\n👉 https://batikwistara.com/berita";
       }
     }
 
-    // === MENU ALAMAT (3 / alamat / lokasi) ===
-    else if (["3", "alamat", "lokasi"].includes(msg)) {
-      reply = `📍 *Alamat Batik Wistara:*\nJl. Tambak Medokan Ayu VI C No.56B, Medokan Ayu, Kec. Rungkut, Surabaya, Jawa Timur 60295\n🕒 Buka: 08.00–17.00 WIB\n\n🗺️ https://maps.app.goo.gl/WqHPo5eNBDqHykhM8\n\nKetik *0* untuk chat admin.`;
-    }
-
-    // === CEK PESANAN (4 / cek / pesanan / id) ===
+    // === MENU CEK PESANAN ===
     else if (["4", "cek", "pesanan"].some(k => msg.includes(k))) {
       const id = msg.replace(/cek|pesanan/gi, "").trim();
 
@@ -82,29 +76,33 @@ async function getBotReply(sender, message) {
         reply = "🔍 Silakan kirim *cek [ID pesanan]* untuk melihat status.\nContoh: *cek 11*";
       } else {
         try {
-          const res = await fetch(`https://batikwistara.com/api/cek-pesanan/${id}`);
-          const data = await res.json();
+          const res = await fetch(`https://batikwistara.com/api/pesanan/${id}`);
+          const order = await res.json();
 
-          if (data.status === "not_found") {
+          if (!order || order.status === "not_found") {
             reply = `❌ Maaf, pesanan dengan ID *${id}* tidak ditemukan.`;
           } else {
-            const p = data.data;
-            reply = `🧾 *Status Pesanan Anda*\n\n🆔 *ID:* ${p.id}\n👤 *Nama:* ${p.nama}\n📞 *Telepon:* ${p.telepon}\n💰 *Total:* Rp${p.total}\n💳 *Pembayaran:* ${p.status_pembayaran}\n🚚 *Status:* ${p.status_pesanan}\n📅 *Tanggal:* ${p.tanggal}\n💼 *Metode:* ${p.metode}\n\nTerima kasih telah berbelanja di *Batik Wistara*! 💛`;
+            reply = `🧾 *Status Pesanan Anda*\n\n🆔 *ID:* ${order.id}\n👤 *Nama:* ${order.nama}\n📞 *Telepon:* ${order.telepon}\n💰 *Total:* Rp${parseInt(order.total).toLocaleString("id-ID")}\n💳 *Pembayaran:* ${order.status_pembayaran}\n🚚 *Status:* ${order.status}\n📅 *Tanggal:* ${new Date(order.created_at).toLocaleDateString("id-ID")}\n💼 *Metode:* ${order.metode_pembayaran}\n\nTerima kasih telah berbelanja di *Batik Wistara*! 💛`;
           }
         } catch (err) {
-          console.error("Error cek pesanan:", err);
-          reply = "⚠️ Gagal mengambil data pesanan. Coba lagi nanti.";
+          console.error("❌ Gagal mengambil data pesanan:", err);
+          reply = "⚠️ Maaf, server sedang tidak dapat mengambil data pesanan.";
         }
       }
     }
 
-    // === HUBUNGI ADMIN (0 / admin) ===
+    // === MENU ALAMAT ===
+    else if (["3", "alamat", "lokasi"].includes(msg)) {
+      reply = `📍 *Alamat Batik Wistara:*\nJl. Tambak Medokan Ayu VI C No.56B, Rungkut — Surabaya\n🕒 Buka: 08.00–17.00 WIB\n\n🗺️ https://maps.app.goo.gl/WqHPo5eNBDqHykhM8\n\nKetik *0* untuk chat admin.`;
+    }
+
+    // === MENU ADMIN ===
     else if (["0", "admin"].includes(msg)) {
-      reply = `📞 Admin akan segera membalas anda.\nBot akan berhenti sementara sampai Anda ketik *menu* untuk melanjutkan kembali.`;
+      reply = `📞 Admin akan segera membalas anda.\nBot akan berhenti sementara.\nKetik *menu* untuk mengaktifkan kembali bot.`;
       activeSessions.set(sender, "pause");
     }
 
-    // === MENU UTAMA (default) ===
+    // === MENU UTAMA ===
     else {
       const hour = new Date().getHours();
       const greet =
@@ -125,12 +123,12 @@ Silakan pilih layanan berikut:
     return reply;
   } catch (err) {
     console.error("❌ Error chatbot:", err);
-    return "⚠️ Maaf, terjadi kesalahan pada server chatbot.";
+    return "⚠️ Terjadi kesalahan pada server chatbot.";
   }
 }
 
 // ===============================
-// 🌐 CHATBOT UNTUK WEBSITE
+// 🌐 API UNTUK WEBSITE
 // ===============================
 app.post("/api/chat", async (req, res) => {
   const { message } = req.body;
@@ -139,17 +137,14 @@ app.post("/api/chat", async (req, res) => {
 });
 
 // ===============================
-// 💬 WEBHOOK UNTUK WHATSAPP FONNTE
+// 💬 WEBHOOK UNTUK WHATSAPP (FONNTE)
 // ===============================
 app.post("/api/fonnte-webhook", async (req, res) => {
   try {
     const sender = req.body.sender;
     const message = req.body.message;
 
-    if (!sender || !message) {
-      console.warn("⚠️ Webhook tanpa data pengirim, diabaikan.");
-      return res.sendStatus(200);
-    }
+    if (!sender || !message) return res.sendStatus(200);
 
     const reply = await getBotReply(sender, message);
 
