@@ -64,7 +64,7 @@ async function getBotReply(message) {
 
     // === MENU HUBUNGI ADMIN (0 / admin) ===
     else if (["0", "admin"].includes(msg)) {
-      reply = `📞 Admin akan segera membalas anda, Terima Kasih Telah menunggu`;
+      reply = `📞 Admin akan segera membalas anda, Silahkan ketik pertanyaan yang ingin anda tanyakan.\nTerima Kasih Telah menunggu`;
     }
 
     // === MENU UTAMA (default) ===
